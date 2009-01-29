@@ -1,12 +1,11 @@
 require 'rubygems'
 require 'sinatra'
+require 'json'
 require 'dm-core'
 require 'dm-serializer'
-#require 'syntaxi'
-
-### SETUP
 
 DataMapper.setup(:default, "mysql://root@localhost/smt")
+repository(:default).adapter.field_naming_convention = lambda { |value| value.name.to_s }
 
 class Catalog
   include DataMapper::Resource
@@ -29,7 +28,7 @@ class Product
   include DataMapper::Resource
   storage_names[:default] = 'Products'
 
-  property :id,                    Serial, :field => 'PRODUCTDATAID',:serial => true
+  property :id,                    Serial, :field => 'PRODUCTDATAID',:key => true
   property :name,                  String, :field => 'PRODUCT'
   property :version,               String, :field => 'VERSION'
   property :release,               String, :field => 'REL'
@@ -44,7 +43,26 @@ class Product
   property :service,               String, :field => 'SERVICE'
   property :product_list,          String, :field => 'PRODUCT_LIST'
   property :product_class,         String, :field => 'PRODUCT_CLASS'
-  property :src,                   String, :field => 'SRC'  
+  property :src,                   String, :field => 'SRC'
+
+  has n, :registrations, :child_key => [:PRODUCTID]
+end
+
+class Registration
+  include DataMapper::Resource
+  storage_names[:default] = 'Registration'
+
+  property :client_id,             String, :field => 'GUID', :key => true
+  property :product_id,            Serial, :field => 'PRODUCTID', :key => true
+  property :regdate,               DateTime, :field => 'REGDATE'
+  property :nccregdate,            DateTime, :field => 'NCCREGDATE'
+  property :nccregerror,           Integer, :field => 'NCCREGERROR'
+
+  #has 1, :product, :child_key => [:PRODUCTID]
+  #has 1, :product
+  belongs_to :product
+  belongs_to :client, :child_key => [:client_id]
+
 end
 
 class Client
@@ -56,13 +74,15 @@ class Client
   property :target,                String, :field => 'TARGET'
   property :description,           String, :field => 'DESCRIPTION'
   property :lastcontact,           DateTime, :field => 'LASTCONTACT'
+
+  has n, :registrations, :child_key => [:GUID]
 end
 
 class Subscription
   include DataMapper::Resource
   storage_names[:default] = 'Subscriptions'
 
-  property :id,                    String, :field => 'SUBID',:serial => true
+  property :id,                    String, :field => 'SUBID',:key => true
   property :regcode,               String, :field => 'REGCODE'
   property :name,                  String, :field => 'SUBNAME'
   property :type,                  String, :field => 'SUBTYPE'
@@ -76,19 +96,6 @@ class Subscription
   property :consumed,              Integer, :field => 'CONSUMED'
 end
 
-class Registration
-  include DataMapper::Resource
-  storage_names[:default] = 'Registration'
-  
-  property :id,                    String, :field => 'GUID',:serial => true
-  property :productid,             Serial, :field => 'PRODUCTID'
-  property :regdate,               DateTime, :field => 'REGDATE'
-  property :nccregdate,            DateTime, :field => 'NCCREGDATE'
-  property :nccregerror,           Integer, :field => 'NCCREGERROR'
-
-  has 1, :product, :child_key => [:productid]
-  
-end
 
 class Target
   include DataMapper::Resource
@@ -110,16 +117,22 @@ class MachineData
   property :value,                 Text, :field => 'VALUE'
 end
 
+#mime_type :json, "application/json"
+#mime_type :xml, "text/xml"
 #layout 'default.erb'
-
 # new
 get '/' do
   #erb :new, :layout => 'default.erb'
 end
 
-get '/catalogs' do
+get '/catalogs.xml' do
   content_type 'text/xml', :charset => 'utf-8'
   Catalog.all.to_xml
+end
+
+get '/catalogs.json' do
+  content_type 'applicaton/json', :charset => 'utf-8'
+  Catalog.all.to_json
 end
 
 get '/catalogs/:id' do
@@ -139,9 +152,16 @@ get '/products/:id' do
   c.to_xml
 end
 
-get '/clients' do
+get '/clients.xml' do
   content_type 'text/xml', :charset => 'utf-8'
-  Client.all.to_xml
+  builder do |xml|
+    xml.instruct!
+    xml.clients do |xml|
+      Client.all.each do |c|
+        xml.client :href => "http://localhost:4875/registrations.xml/#{c.id}"
+      end
+    end
+  end
 end
 
 get '/clients/:id' do
@@ -150,14 +170,21 @@ get '/clients/:id' do
   c.to_xml
 end
 
-get '/registrations' do
+get '/registrations.xml' do
   content_type 'text/xml', :charset => 'utf-8'
-  Registration.all.to_xml
+  builder do |xml|
+    xml.instruct!
+    xml.registrations do |xml|
+      Registration.all.each do |r|
+        xml.registration :href => "http://localhost:4875/registrations.xml/#{r.id}"
+      end
+    end
+  end
 end
 
-get '/registration/:id' do
+get '/registrations.xml/:gid/:pid' do
   content_type 'text/xml', :charset => 'utf-8'
-  c = Registration.get(params[:id])
-  c.to_xml
+  c = Registration.get(params[:gid], params[:pid])
+  c.to_xml(:exclude => :product_id, :include => :product)
 end
 
