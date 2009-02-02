@@ -15,7 +15,6 @@ class Catalog
   property :name,                  String, :field => 'NAME'
   property :description,           String, :field => 'DESCRIPTION'
   property :target,                String, :field => 'TARGET'
-  property :description,           String, :field => 'DESCRIPTION'
   property :localpath,             String, :field => 'LOCALPATH'
   property :exthost,               String, :field => 'EXTHOST'
   property :exturl,                String, :field => 'EXTURL'
@@ -69,13 +68,13 @@ class Client
   include DataMapper::Resource
   storage_names[:default] = 'Clients'
 
-  property :id,                    String, :field => 'GUID',:serial => true
+  property :id,                    String, :field => 'GUID',:key => true
   property :hostname,              String, :field => 'HOSTNAME'
   property :target,                String, :field => 'TARGET'
   property :description,           String, :field => 'DESCRIPTION'
   property :lastcontact,           DateTime, :field => 'LASTCONTACT'
 
-  has n, :registrations, :child_key => [:GUID]
+  has n, :registration, :child_key => [:GUID]
 end
 
 class Subscription
@@ -126,65 +125,120 @@ get '/' do
 end
 
 get '/catalogs.xml' do
+  c = Catalog.all
+  c = c.all(:mirrorable => 'Y') if params[:mirrorable] == 'Y'
+  c = c.all(:domirror => 'Y') if params[:domirror] == 'Y'
+  c = c.all(:name.like => "%#{params[:match]}%" ) if not params[:match].nil?
+  xml = c.to_xml
   content_type 'text/xml', :charset => 'utf-8'
-  Catalog.all.to_xml
+  xml
 end
 
-get '/catalogs.json' do
-  content_type 'applicaton/json', :charset => 'utf-8'
-  Catalog.all.to_json
-end
-
-get '/catalogs/:id' do
-  content_type 'text/xml', :charset => 'utf-8'
+get '/catalogs/:id.xml' do
   c = Catalog.get(params[:id])
-  c.to_xml
+  not_found if c.nil?
+  xml = c.to_xml
+  content_type 'text/xml', :charset => 'utf-8'
+  xml
 end
 
-get '/products' do
+get '/products.xml' do
+  p = Product.all
+  p = p.all(:name.like => "%#{params[:match]}%" ) if not params[:match].nil?
+  xml = p.to_xml(:exclude => [:needinfo, :paramlist])
   content_type 'text/xml', :charset => 'utf-8'
-  Product.all.to_xml
+  xml
 end
 
-get '/products/:id' do
+get '/products/:id.xml' do
+  p = Product.get(params[:id])
+  not_found if p.nil?
+  xml = p.to_xml(:exclude => [:needinfo, :paramlist])
   content_type 'text/xml', :charset => 'utf-8'
-  c = Product.get(params[:id])
-  c.to_xml
+  xml
+end
+
+get '/products/:id/paramlist.xml' do
+  p = Product.get(params[:id])
+  not_found if p.nil?
+  xml = p.paramlist
+  content_type 'text/xml', :charset => 'utf-8'
+  xml
+end
+
+get '/products/:id/needinfo.xml' do
+  p = Product.get(params[:id])
+  not_found if p.nil?
+  xml = p.needinfo
+  content_type 'text/xml', :charset => 'utf-8'
+  xml
 end
 
 get '/clients.xml' do
+  c = Client.all
+  c = c.all(:hostname.like => "%#{params[:match]}%" ) if not params[:match].nil?
+  not_found if c.nil?
+  xml = c.to_xml
   content_type 'text/xml', :charset => 'utf-8'
-  builder do |xml|
-    xml.instruct!
-    xml.clients do |xml|
-      Client.all.each do |c|
-        xml.client :href => "http://localhost:4875/registrations.xml/#{c.id}"
-      end
-    end
-  end
+  xml
 end
 
-get '/clients/:id' do
+get '/clients/:id.xml' do
   content_type 'text/xml', :charset => 'utf-8'
   c = Client.get(params[:id])
-  c.to_xml
+  c.to_xml if not c.nil?
+end
+
+get '/clients/:id/registrations.xml' do
+
+  #proc = Proc.new do |options|
+  #  options[:builder].tag!('id', options[:object].name.reverse)
+  #end
+ #object.to_xml :object => object, :procs => [ proc ]
+  xml = Registration.all(:client_id => params[:id]).to_xml
+  content_type 'text/xml', :charset => 'utf-8'
+  xml
+end
+
+get '/clients/:id/products.xml' do
+  content_type 'text/xml', :charset => 'utf-8'
+  Product.all('registration.client.id' => params[:id]).to_xml
 end
 
 get '/registrations.xml' do
   content_type 'text/xml', :charset => 'utf-8'
-  builder do |xml|
-    xml.instruct!
-    xml.registrations do |xml|
-      Registration.all.each do |r|
-        xml.registration :href => "http://localhost:4875/registrations.xml/#{r.id}"
-      end
-    end
-  end
+  Registration.all.to_xml
 end
 
-get '/registrations.xml/:gid/:pid' do
+get '/registrations/:id.xml' do
   content_type 'text/xml', :charset => 'utf-8'
-  c = Registration.get(params[:gid], params[:pid])
+  guid,pid = params[:id].split(';')
+  c = Registration.get(guid, pid)
   c.to_xml(:exclude => :product_id, :include => :product)
 end
 
+get '/registrations/:id/product.xml' do
+  content_type 'text/xml', :charset => 'utf-8'
+  guid,pid = params[:id].split(';')
+  # FIXME I dont know how to do a join using the composite keys
+  r = Registration.get(guid, pid)
+  if not r.nil?
+    Product.get(pid).to_xml
+  end
+end
+
+get '/subscriptions.xml' do
+  content_type 'text/xml', :charset => 'utf-8'
+  Subscription.all.to_xml
+end
+
+get '/subscriptions/:id.xml' do
+  content_type 'text/xml', :charset => 'utf-8'
+  s = Subscription.get(params[:id]).to_xml
+end
+
+get '/test.xml' do
+  xml = '<true/>' if params[:foo]
+  content_type 'text/xml', :charset => 'utf-8'
+  xml
+end

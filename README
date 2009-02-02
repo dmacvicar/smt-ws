@@ -1,0 +1,50 @@
+
+RESTful API
+
+/catalogs.xml
+* all catalogs
+  Parameters:
+  mirrorable=Y
+  enabled=Y
+  match=string
+/catalog/3432fdsfds.xml
+* catalog with id 3432fdsfds
+
+/clients.xml
+* all clients
+  Parameters:
+  match=string
+/clients/12.xml
+* client with id 12
+/clients/12/registrations.xml
+* registrations for client 12
+/clients/4/products.xml
+* client registered products, same as retrieving registrations for
+  a client, and then each registration product, but in one request.
+/registrations.xml
+* all registrations
+/registrations/12;34.xml
+* registration of product 34 for client 12
+/registrations/12;34/product.xml
+* product for that registration
+
+/products.xml
+* all products
+  Parameters:
+  match=string
+/products/12.xml
+* product with id 12
+/products/12/paramlist.xml
+* paramlist for product with id 12
+/products/12/needinfo.xml
+* needinfo for product with id 12
+
+/subscriptions.xml
+* FIXME very heavy
+/subscriptions/1234.xml
+
+TODO API:
+
+
+
+
